@@ -75,7 +75,8 @@ category_ids = {
 class ShapeNet(data.Dataset):
     def __init__(
         self, 
-        dataset_folder, 
+        surfaces_folder, 
+        occupancies_folder, 
         split='train', 
         category_id='03001627',
         num_query_pts=2048, 
@@ -87,8 +88,8 @@ class ShapeNet(data.Dataset):
         seed=42
     ):
         
-        self.surfaces_dir = os.path.join(dataset_folder, category_id, '4_pointcloud')
-        self.occupancies_dir = os.path.join(dataset_folder, 'ShapeNetV2_point', category_id)
+        self.surfaces_dir = os.path.join(surfaces_folder, category_id, '4_pointcloud')
+        self.occupancies_dir = os.path.join(occupancies_folder, 'ShapeNetV2_point', category_id)
         
         self.split = split
         self.num_query_pts = num_query_pts
