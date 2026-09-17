@@ -2,7 +2,7 @@ from tqdm import tqdm
 from pathlib import Path
 import util.misc as misc
 from util.shapenet import ShapeNet, category_ids
-import models_ae
+import eqmodels_ae
 import mcubes
 import trimesh
 from scipy.spatial import cKDTree as KDTree
@@ -40,7 +40,7 @@ def main():
 
     cudnn.benchmark = True
 
-    model = models_ae.__dict__[args.model]()
+    model = eqmodels_ae.__dict__[args.model]()
     device = torch.device(args.device)
 
     model.eval()

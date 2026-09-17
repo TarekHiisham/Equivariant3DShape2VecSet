@@ -17,7 +17,7 @@ import util.misc as misc
 from util.datasets import build_shape_surface_occupancy_dataset
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
-import models_ae
+import eqmodels_ae
 
 from engine_ae import train_one_epoch, evaluate
 
@@ -155,7 +155,7 @@ def main(args):
         drop_last=False
     )
     
-    model = models_ae.__dict__[args.model](N=args.point_cloud_size)
+    model = eqmodels_ae.__dict__[args.model](N=args.point_cloud_size)
     model.to(device)
 
     model_without_ddp = model

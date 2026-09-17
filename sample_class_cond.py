@@ -9,7 +9,7 @@ import torch
 
 import trimesh
 
-import models_class_cond, models_ae
+import models_class_cond, eqmodels_ae
 
 from pathlib import Path
 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     device = torch.device('cuda:0')
 
-    ae = models_ae.__dict__[args.ae]()
+    ae = eqmodels_ae.__dict__[args.ae]()
     ae.eval()
     ae.load_state_dict(torch.load(args.ae_pth)['model'])
     ae.to(device)

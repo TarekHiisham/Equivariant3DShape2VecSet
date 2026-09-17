@@ -15,7 +15,7 @@ import util.misc as misc
 from util.datasets import build_shape_surface_occupancy_dataset
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
-import models_class_cond, models_ae
+import models_class_cond, eqmodels_ae
 
 from engine_class_cond import train_one_epoch, evaluate
 
@@ -157,7 +157,7 @@ def main(args):
         drop_last=False
     )
 
-    ae = models_ae.__dict__[args.ae]()
+    ae = eqmodels_ae.__dict__[args.ae]()
     ae.eval()
     print("Loading autoencoder %s" % args.ae_pth)
     ae.load_state_dict(torch.load(args.ae_pth, map_location='cpu')['model'])
