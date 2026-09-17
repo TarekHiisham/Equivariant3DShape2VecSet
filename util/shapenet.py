@@ -75,8 +75,8 @@ category_ids = {
 class ShapeNet(data.Dataset):
     def __init__(
         self, 
-        surfaces_folder, 
-        occupancies_folder, 
+        surfaces_folder=None, 
+        occupancies_folder=None, 
         split='train', 
         category_id='03001627',
         num_query_pts=2048, 
