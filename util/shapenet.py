@@ -97,8 +97,8 @@ class ShapeNet(data.Dataset):
         self.return_surface = return_surface
         self.transform = transform
 
-        surf_models = set(os.listdir(self.surfaces_dir))
-        occ_models = set(os.listdir(self.occupancies_dir))
+        surf_models = set(glob.glob(os.path.join(self.surfaces_dir, '*.npz')))
+        occ_models = set(glob.glob(os.path.join(self.occupancies_dir)))
         common_models = sorted(list(surf_models.intersection(occ_models)))
 
         rng = np.random.default_rng(seed)
@@ -124,7 +124,7 @@ class ShapeNet(data.Dataset):
     def __getitem__(self, idx):
         model_id = self.models[idx]
 
-        occ_file = os.path.join(self.occupancies_dir, model_id, '.npz')
+        occ_file = os.path.join(self.occupancies_dir, model_id)
         with np.load(occ_file) as occ_data:
             query_points = occ_data['points'].astype(np.float32)
             raw_labels = occ_data['occupancies']
@@ -144,7 +144,7 @@ class ShapeNet(data.Dataset):
 
         surface = None
         if self.return_surface:
-            surf_file = os.path.join(self.surfaces_dir, model_id, '.npz')
+            surf_file = os.path.join(self.surfaces_dir, model_id)
             with np.load(surf_file) as surf_data:
                 surf_pts = surf_data['points'].astype(np.float32)
 
