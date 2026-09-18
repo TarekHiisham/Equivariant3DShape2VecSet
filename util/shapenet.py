@@ -31,15 +31,18 @@ class ShapeNet(data.Dataset):
         self.return_surface = return_surface
         self.transform = transform
 
-        surf_models = set(glob.glob(os.path.join(self.surfaces_dir, '*.npz')))
-        occ_models = set(glob.glob(os.path.join(self.occupancies_dir, '*.npz')))
-        common_models = sorted(list(surf_models.intersection(occ_models)))
+        occ_models = glob.glob(os.path.join(self.occupancies_dir, '*.npz'))
+        sur_models = [os.path.join(self.surfaces_dir, os.path.splitext(os.path.basename(m))[0], '.npz')
+                       for m in occ_models
+                       if os.path.exists(
+                        os.path.join(self.surfaces_dir, os.path.splitext(os.path.basename(m))[0] + '.npz')
+                        )]
 
         rng = np.random.default_rng(seed)
-        shuffled_indices = rng.permutation(len(common_models))
+        shuffled_indices = rng.permutation(len(occ_models))
         
-        n_train = int(train_ratio * len(common_models))
-        n_val = int(val_ratio * len(common_models))
+        n_train = int(train_ratio * len(occ_models))
+        n_val = int(val_ratio * len(occ_models))
 
         if split == 'train':
             selected_idx = shuffled_indices[:n_train]
@@ -50,7 +53,7 @@ class ShapeNet(data.Dataset):
         else:
             raise ValueError(f"Unknown split: {split}. Choose from ['train', 'val', 'test']")
 
-        self.models = [common_models[i] for i in selected_idx]
+        self.models = [occ_models[i] for i in selected_idx]
 
     def __len__(self):
         return len(self.models)
