@@ -63,8 +63,8 @@ class ShapeNet(data.Dataset):
 
         occ_file = os.path.join(self.occupancies_dir, model_id)
         with np.load(occ_file) as occ_data:
-            query_points = occ_data['points'].astype(np.float32)
-            raw_labels = occ_data['occupancies']
+            query_points = occ_data['vol_points'].astype(np.float32)
+            raw_labels = occ_data['vol_label']
 
         if raw_labels.dtype == np.uint8:
             labels = np.unpackbits(raw_labels)[:query_points.shape[0]].astype(np.float32)
