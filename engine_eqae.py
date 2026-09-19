@@ -46,7 +46,7 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         labels = labels.to(device, non_blocking=True)
         surface = surface.to(device, non_blocking=True)
 
-        R = o3.rand_matrix().to(dtype=torch.float32)
+        R = o3.rand_matrix().to(device=device, dtype=torch.float32)
         D = model.irreps.D_from_matrix(R)
 
         points_rot = torch.einsum('ij, bnj -> bni', R, points)
