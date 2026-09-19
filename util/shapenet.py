@@ -13,7 +13,7 @@ class ShapeNet(data.Dataset):
         mesh_folder,
         point_folder,
         split='train',
-        category_id='03001627',
+        category_id='03797390',
         num_samples=4096,
         pc_size=2048,
         return_surface=True,
