@@ -218,7 +218,7 @@ class EquivariantAutoEncoder(nn.Module):
 
         ratio = 1.0 * self.num_latents / self.num_inputs
 
-        idx = fps(pos, batch, ratio=ratio, random_start=True)
+        idx = fps(pos, batch, ratio=ratio, random_start=False)
 
         sampled_pc = pos[idx]
         sampled_pc = sampled_pc.view(B, -1, 3)
