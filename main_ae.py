@@ -23,14 +23,14 @@ from engine_eqae import train_one_epoch, evaluate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Autoencoder', add_help=False)
-    parser.add_argument('--batch_size', default=1, type=int,
+    parser.add_argument('--batch_size', default=64, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=800, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='ae_d512_m128', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='ae_d512_m512', type=str, metavar='MODEL',
                         help='Name of model to train')
 
     parser.add_argument('--point_cloud_size', default=2048, type=int,
@@ -197,10 +197,10 @@ def main(args):
         )
 
         loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
-        return loss_bce + 2 * loss_inv
+        return loss_bce + 10 * loss_inv
 
     def criterion_lat(lat_feat_expected, lat_feat_rot):
-        return 2 * torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
+        return 10 * torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
 
     print("criterion = %s" % str(criterion))
 

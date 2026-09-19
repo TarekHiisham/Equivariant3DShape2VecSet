@@ -152,7 +152,7 @@ def evaluate(data_loader, model, device):
         )
 
         loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
-        return loss_bce + 2 * loss_inv
+        return loss_bce + 10 * loss_inv
     
     def criterion_lat(lat_feat_expected, lat_feat_rot):
         return 2 * torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)

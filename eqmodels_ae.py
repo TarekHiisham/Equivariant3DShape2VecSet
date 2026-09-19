@@ -164,8 +164,8 @@ class EquivariantAutoEncoder(nn.Module):
     def __init__(
         self,
         *,
-        depth=4,
-        irreps_dim="64x0e + 32x1o",
+        depth=24,
+        irreps_dim="256x0e + 256x1o",
         num_inputs = 2048,
         num_latents = 512,
     ):
@@ -261,7 +261,7 @@ class EquivariantAutoEncoder(nn.Module):
 
         return {'logits': o}
 
-def create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=2048, determinisitc=True):
+def create_autoencoder(irreps_dim="256x0e + 256x1o", M=512, N=2048, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(
             depth=2,
@@ -273,23 +273,23 @@ def create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=2048, determinisitc=
 
 ###
 def ae_d512_m512(N=2048):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=512, N=N, determinisitc=True)
 
-def ae_d512_m256(N=1024):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=256, N=N, determinisitc=True)
+def ae_d512_m256(N=2048):
+    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=256, N=N, determinisitc=True)
 
-def ae_d512_m128(N=512):
-    return create_autoencoder(irreps_dim="16x0e + 8x1o", M=128, N=N, determinisitc=True)
+def ae_d512_m128(N=2048):
+    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=128, N=N, determinisitc=True)
 
 def ae_d512_m64(N=2048):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=64, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=64, N=N, determinisitc=True)
 
 ###
 def ae_d256_m512(N=2048):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=N, determinisitc=True)
 
 def ae_d128_m512(N=2048):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=N, determinisitc=True)
 
 def ae_d64_m512(N=2048):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=N, determinisitc=True)
