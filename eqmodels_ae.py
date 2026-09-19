@@ -254,8 +254,8 @@ class EquivariantAutoEncoder(nn.Module):
         out_logits = self.to_outputs(latents)
         return out_logits
 
-    def forward(self, pc, queries, sampled_idx=None):
-        latents, sampled_pc = self.encode(pc, sampled_idx)
+    def forward(self, pc, queries):
+        latents, sampled_pc = self.encode(pc)
 
         o = self.decode(latents, sampled_pc, queries).squeeze(-1)
 
