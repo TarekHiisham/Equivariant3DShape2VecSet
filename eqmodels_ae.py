@@ -279,7 +279,7 @@ def ae_d512_m256(N=1024):
     return create_autoencoder(irreps_dim="32x0e + 16x1o", M=256, N=N, determinisitc=True)
 
 def ae_d512_m128(N=512):
-    return create_autoencoder(irreps_dim="32x0e + 16x1o", M=128, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="16x0e + 8x1o", M=128, N=N, determinisitc=True)
 
 def ae_d512_m64(N=2048):
     return create_autoencoder(irreps_dim="32x0e + 16x1o", M=64, N=N, determinisitc=True)
