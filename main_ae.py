@@ -19,7 +19,7 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 import eqmodels_ae
 
-from engine_ae import train_one_epoch, evaluate
+from engine_eqae import train_one_epoch, evaluate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Autoencoder', add_help=False)
@@ -30,7 +30,7 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='ae_blob64', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='ae_d512_m512', type=str, metavar='MODEL',
                         help='Name of model to train')
 
     parser.add_argument('--point_cloud_size', default=2048, type=int,
@@ -57,7 +57,10 @@ def get_args_parser():
 
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/ibex/scratch/projects/c2168/diffusion-shapes/datasets', type=str,
+    parser.add_argument('--mesh_folder', default='/content/surfaces', type=str,
+                        help='dataset path')
+
+    parser.add_argument('--point_folder', default='/content/occupancies', type=str,
                         help='dataset path')
 
     parser.add_argument('--output_dir', default='./output/',
@@ -76,7 +79,7 @@ def get_args_parser():
                         help='Perform evaluation only')
     parser.add_argument('--dist_eval', action='store_true', default=False,
                         help='Enabling distributed evaluation (recommended during training for faster monitor')
-    parser.add_argument('--num_workers', default=60, type=int)
+    parser.add_argument('--num_workers', default=2, type=int)
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
@@ -187,7 +190,17 @@ def main(args):
     optimizer = torch.optim.AdamW(model_without_ddp.parameters(), lr=args.lr)
     loss_scaler = NativeScaler()
 
-    criterion = torch.nn.BCEWithLogitsLoss()
+    def criterion(outputs, outputs_rot, labels):
+        loss_bce = torch.nn.functional.binary_cross_entropy_with_logits(
+            outputs,
+            labels
+        )
+
+        loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
+        return loss_bce + 2 * loss_inv
+
+    def criterion_lat(lat_feat_expected, lat_feat_rot):
+        return 2 * torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
 
     print("criterion = %s" % str(criterion))
 
@@ -205,7 +218,7 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
-            model, criterion, data_loader_train,
+            model, criterion, criterion_lat, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad,
             log_writer=log_writer,

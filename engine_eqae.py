@@ -11,12 +11,13 @@ from typing import Iterable
 
 import torch
 import torch.nn.functional as F
+import e3nn.o3 as o3
 
 import util.misc as misc
 import util.lr_sched as lr_sched
 
 
-def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
+def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     log_writer=None, args=None):
@@ -45,25 +46,39 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         labels = labels.to(device, non_blocking=True)
         surface = surface.to(device, non_blocking=True)
 
+        R = o3.rand_matrix().to(dtype=torch.float32)
+        D = model.irreps.D_from_matrix(R)
+
+        points_rot = torch.einsum('ij, bnj -> bni', R, points)
+        surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
+
         with torch.cuda.amp.autocast(enabled=False):
+            lat_feat = model.ecode(surface)
             outputs = model(surface, points)
+
+            # Equivariance results
+            lat_feat_rot = model.ecode(surface_rot)
+            # Invariance results 
+            outputs_rot = model(surface_rot, points_rot)
+
             if 'kl' in outputs:
                 loss_kl = outputs['kl']
                 loss_kl = torch.sum(loss_kl) / loss_kl.shape[0]
             else:
                 loss_kl = None
 
+            lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
             outputs = outputs['logits']
+            outputs_rot = outputs_rot['logits']
 
-
-            loss_vol = criterion(outputs[:, :1024], labels[:, :1024])
-            loss_near = criterion(outputs[:, 1024:], labels[:, 1024:])
-
+            loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
+            loss_vol = criterion(outputs[:, :1024], outputs_rot[:, :1024], labels[:, :1024])
+            loss_near = criterion(outputs[:, 1024:], outputs_rot[:, 1024:], labels[:, 1024:])
             
             if loss_kl is not None:
                 loss = loss_vol + 0.1 * loss_near + kl_weight * loss_kl
             else:
-                loss = loss_vol + 0.1 * loss_near
+                loss = loss_vol + loss_lat + 0.1 * loss_near
 
         loss_value = loss.item()
 
@@ -127,7 +142,17 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 @torch.no_grad()
 def evaluate(data_loader, model, device):
-    criterion = torch.nn.BCEWithLogitsLoss()
+    def criterion(outputs, outputs_rot, labels):
+        loss_bce = torch.nn.functional.binary_cross_entropy_with_logits(
+            outputs,
+            labels
+        )
+
+        loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
+        return loss_bce + 2 * loss_inv
+    
+    def criterion_lat(lat_feat_expected, lat_feat_rot):
+        return 2 * torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
 
     metric_logger = misc.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -135,25 +160,43 @@ def evaluate(data_loader, model, device):
     # switch to evaluation mode
     model.eval()
 
-    for points, labels, surface, _ in metric_logger.log_every(data_loader, 50, header):
+    for points, labels, surface in metric_logger.log_every(data_loader, 50, header):
 
         points = points.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
         surface = surface.to(device, non_blocking=True)
 
+        R = o3.rand_matrix().to(dtype=torch.float32)
+        D = model.irreps.D_from_matrix(R)
+
+        points_rot = torch.einsum('ij, bnj -> bni', R, points)
+        surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
+
         # compute output
         with torch.cuda.amp.autocast(enabled=False):
 
+            lat_feat = model.ecode(surface)
             outputs = model(surface, points)
+
+            # Equivariance results
+            lat_feat_rot = model.ecode(surface_rot)
+            # Invariance results 
+            outputs_rot = model(surface_rot, points_rot)
+
             if 'kl' in outputs:
                 loss_kl = outputs['kl']
                 loss_kl = torch.sum(loss_kl) / loss_kl.shape[0]
             else:
                 loss_kl = None
 
+            lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
+            outputs_rot = outputs_rot['logits']
             outputs = outputs['logits']
 
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs, outputs_rot, labels)
+            loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
+
+            loss = loss + loss_lat
 
         threshold = 0
 
