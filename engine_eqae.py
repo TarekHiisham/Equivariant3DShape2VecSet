@@ -56,11 +56,11 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
         with torch.cuda.amp.autocast(enabled=False):
-            lat_feat = model.encode(surface)
+            lat_feat, _ = model.encode(surface)
             outputs = model(surface, points)
 
             # Equivariance results
-            lat_feat_rot = model.encode(surface_rot)
+            lat_feat_rot, _ = model.encode(surface_rot)
             # Invariance results 
             outputs_rot = model(surface_rot, points_rot)
 
@@ -181,11 +181,11 @@ def evaluate(data_loader, model, device):
         # compute output
         with torch.cuda.amp.autocast(enabled=False):
 
-            lat_feat = model.encode(surface)
+            lat_feat, _ = model.encode(surface)
             outputs = model(surface, points)
 
             # Equivariance results
-            lat_feat_rot = model.encode(surface_rot)
+            lat_feat_rot, _ = model.encode(surface_rot)
             # Invariance results 
             outputs_rot = model(surface_rot, points_rot)
 
