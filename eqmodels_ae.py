@@ -203,27 +203,27 @@ class EquivariantAutoEncoder(nn.Module):
         x_rel = diff / dist
         return x_rel, dist
 
-    def encode(self, pc, sampled_idx=None):
+    def encode(self, pc):
         # pc: B x N x 3
         B, N, D = pc.shape
         assert N == self.num_inputs
-        idx = None
 
         ###### fps
         flattened = pc.view(B*N, D)
-        if sampled_idx is None:
 
-          batch = torch.arange(B).to(pc.device)
-          batch = torch.repeat_interleave(batch, N)
+        batch = torch.arange(B).to(pc.device)
+        batch = torch.repeat_interleave(batch, N)
 
-          pos = flattened
+        pos = flattened
 
-          ratio = 1.0 * self.num_latents / self.num_inputs
+        ratio = 1.0 * self.num_latents / self.num_inputs
 
-          idx = fps(pos, batch, ratio=ratio)
-        else:
-          idx = sampled_idx
+        idx = fps(pos, batch, ratio=ratio, random_start=True)
+
+        sampled_pc = pos[idx]
+        sampled_pc = sampled_pc.view(B, -1, 3)
         ######
+
         sampled_pc = flattened[idx].view(B, -1, 3)
 
         sampled_pc_embeddings = self.point_embed(sampled_pc)
@@ -235,7 +235,7 @@ class EquivariantAutoEncoder(nn.Module):
         x = cross_attn(sampled_pc_embeddings, pc_embeddings, x_rel, dist) + sampled_pc_embeddings
         x = cross_ff(x) + x
 
-        return x, sampled_pc, idx
+        return x, sampled_pc
 
 
     def decode(self, x, sampled_pc, queries):
@@ -255,11 +255,11 @@ class EquivariantAutoEncoder(nn.Module):
         return out_logits
 
     def forward(self, pc, queries, sampled_idx=None):
-        latents, sampled_pc, idx = self.encode(pc, sampled_idx)
+        latents, sampled_pc = self.encode(pc, sampled_idx)
 
         o = self.decode(latents, sampled_pc, queries).squeeze(-1)
 
-        return {'logits': o, 'sampled_idx': idx}
+        return {'logits': o}
 
 def create_autoencoder(irreps_dim="32x0e + 16x1o", M=512, N=2048, determinisitc=True):
     if determinisitc:

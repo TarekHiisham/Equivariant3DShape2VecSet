@@ -93,7 +93,6 @@ class ShapeNet(data.Dataset):
             surface = torch.from_numpy(surface)
 
         if self.sampling:
-
             ind = np.random.default_rng().choice(vol_points.shape[0], self.num_samples, replace=False)
             vol_points = vol_points[ind]
             vol_label = vol_label[ind]
