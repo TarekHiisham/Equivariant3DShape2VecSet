@@ -235,7 +235,7 @@ class EquivariantAutoEncoder(nn.Module):
         x = cross_attn(sampled_pc_embeddings, pc_embeddings, x_rel, dist) + sampled_pc_embeddings
         x = cross_ff(x) + x
 
-        return x, sampled_pc
+        return x, sampled_pc, idx
 
 
     def decode(self, x, sampled_pc, queries):
@@ -255,7 +255,7 @@ class EquivariantAutoEncoder(nn.Module):
         return out_logits
 
     def forward(self, pc, queries):
-        latents, sampled_pc = self.encode(pc)
+        latents, sampled_pc, idx = self.encode(pc)
 
         o = self.decode(latents, sampled_pc, queries).squeeze(-1)
 
