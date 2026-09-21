@@ -314,7 +314,6 @@ class EquivariantAutoEncoder(nn.Module):
 def create_autoencoder(irreps_dim="256x0e + 256x1o", M=512, N=2048, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(
-            depth=2,
             irreps_dim=irreps_dim,
             num_inputs=N,
             num_latents=M
