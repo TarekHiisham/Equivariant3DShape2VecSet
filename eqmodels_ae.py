@@ -68,8 +68,7 @@ class EquivariantPreNorm(nn.Module):
         x = torch.cat([x_s, x_v], dim=-1)
 
         if exists(self.norm_context):
-            context = kwargs['k_feats']
-            normed_context = self.norm_context(context)
+            normed_context = self.norm_context(kwargs['k_feats'])
             kwargs.update(k_feats = normed_context)
         return self.fn(x, **kwargs)
 
@@ -270,8 +269,6 @@ class EquivariantAutoEncoder(nn.Module):
         sampled_pc = pos[idx]
         sampled_pc = sampled_pc.view(B, -1, 3)
         ######
-
-        sampled_pc = flattened[idx].view(B, -1, 3)
 
         sampled_pc_embeddings = self.point_embed(sampled_pc)
         pc_embeddings = self.point_embed(pc)
