@@ -33,7 +33,47 @@ def cache_fn(f):
         cache = f(*args, **kwargs)
         return cache
     return cached_fn
-    
+
+import torch
+import torch.nn as nn
+from e3nn import o3
+
+
+class EquivariantPreNorm(nn.Module):
+    def __init__(self, irreps, fn, context_irreps=None, eps=1e-5):
+        super().__init__()
+        self.irreps = o3.Irreps(irreps)
+        self.nch_s = self.irreps.count("0e")
+        self.nch_v = self.irreps.count("1o")
+        self.eps = eps
+        self.norm_context = EquivariantPreNorm(context_irreps, fn=nn.Identity(), eps=eps) if exists(context_irreps) else None
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        B, N = x.shape[:2]
+        x_s = x[..., :self.nch_s].reshape(B, N, self.nch_s)
+        x_v = x[..., self.nch_s:].reshape(B, N, self.nch_v, 3)        # B, N, nch_v, 3
+
+        mu_s = x_s.mean(dim=-1, keepdim=True)
+        x_s = x_s - mu_s
+        var_s = x_s.pow(2).mean(dim=-1, keepdim=True)
+        x_s = x_s / torch.sqrt(var_s + self.eps)
+
+        mu_v = x_v.mean(dim=-2, keepdim=True)                 # [B, N, 1, 3]
+        x_v = x_v - mu_v
+        var_v = x_v.pow(2).sum(dim=-1).mean(dim=-1, keepdim=True) / 3  # [B, N, 1]
+        x_v = x_v / torch.sqrt(var_v.unsqueeze(-1) + self.eps)
+
+        x_v = x_v.reshape(B, N, -1)
+        x = torch.cat([x_s, x_v], dim=-1)
+
+        if exists(self.norm_context):
+            context = kwargs['context']
+            normed_context = self.norm_context(context)
+            kwargs.update(context = normed_context)
+        return self.fn(x, **kwargs)
+
+
 class EquivariantFeedForward(nn.Module):
   def __init__(self, dim="64x0e + 32x1o", mul=2):
     super().__init__()
@@ -178,19 +218,26 @@ class EquivariantAutoEncoder(nn.Module):
         self.point_embed = EquivariantPointEmbed(irreps_dim=irreps_dim)
 
         self.cross_attend_blocks = nn.ModuleList([
-            EquivariantAttention(irreps_dim=irreps_dim),
-            EquivariantFeedForward(dim=irreps_dim, mul=2)
+            EquivariantPreNorm(irreps_dim, EquivariantAttention(irreps_dim=irreps_dim), context_irreps=irreps_dim),
+            EquivariantPreNorm(irreps_dim, EquivariantFeedForward(dim=irreps_dim, mul=2))
         ])
+
         self.layers = nn.ModuleList([
             nn.ModuleList([
-                EquivariantAttention(irreps_dim=irreps_dim),
-                EquivariantFeedForward(dim=irreps_dim, mul=2)
+                EquivariantPreNorm(
+                    irreps_dim,
+                    EquivariantAttention(irreps_dim=irreps_dim)
+                ),
+                EquivariantPreNorm(
+                    irreps_dim,
+                    EquivariantFeedForward(dim=irreps_dim, mul=2)
+                )
             ])
             for _ in range(depth)
         ])
 
-        self.dec_cross_attn = EquivariantAttention(irreps_dim=irreps_dim)
-        self.dec_cross_ff = EquivariantFeedForward(dim=irreps_dim, mul=2)
+        self.dec_cross_attn = EquivariantPreNorm(irreps_dim, EquivariantAttention(irreps_dim=irreps_dim), context_irreps=irreps_dim)
+        self.dec_cross_ff = EquivariantPreNorm(irreps_dim, EquivariantFeedForward(dim=irreps_dim, mul=2))
 
         self.to_outputs = o3.Linear(o3.Irreps(irreps_dim), o3.Irreps("1x0e"))
 
@@ -232,7 +279,9 @@ class EquivariantAutoEncoder(nn.Module):
         cross_attn, cross_ff = self.cross_attend_blocks
         x_rel, dist = self.compute_geometry(src_pts=sampled_pc, dst_pts=pc)
 
-        x = cross_attn(sampled_pc_embeddings, pc_embeddings, x_rel, dist) + sampled_pc_embeddings
+        x = cross_attn(sampled_pc_embeddings, context=pc_embeddings, 
+                       x_rel=x_rel, 
+                       dist=dist) + sampled_pc_embeddings
         x = cross_ff(x) + x
 
         return x, sampled_pc
@@ -242,13 +291,17 @@ class EquivariantAutoEncoder(nn.Module):
 
         x_rel_latent, dist_latent = self.compute_geometry(src_pts=sampled_pc, dst_pts=sampled_pc)
         for self_attn, self_ff in self.layers:
-          x = self_attn(x, x, x_rel_latent, dist_latent) + x
-          x = self_ff(x) + x
+            x = self_attn(x, context=x, 
+                        x_rel=x_rel_latent, 
+                        dist=dist_latent) + x
+            x = self_ff(x) + x
 
         queries_embeddings = self.point_embed(queries)
         x_rel_q, dist_q = self.compute_geometry(src_pts=queries, dst_pts=sampled_pc)
 
-        latents = self.dec_cross_attn(queries_embeddings, x, x_rel_q, dist_q) + queries_embeddings
+        latents = self.dec_cross_attn(queries_embeddings, context=x, 
+                                      x_rel=x_rel_q, 
+                                      dist=dist_q) + queries_embeddings
         latents = self.dec_cross_ff(latents) + latents
 
         out_logits = self.to_outputs(latents)
