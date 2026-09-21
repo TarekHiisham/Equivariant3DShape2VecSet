@@ -68,9 +68,9 @@ class EquivariantPreNorm(nn.Module):
         x = torch.cat([x_s, x_v], dim=-1)
 
         if exists(self.norm_context):
-            context = kwargs['context']
+            context = kwargs['k_feats']
             normed_context = self.norm_context(context)
-            kwargs.update(context = normed_context)
+            kwargs.update(k_feats = normed_context)
         return self.fn(x, **kwargs)
 
 
@@ -279,7 +279,7 @@ class EquivariantAutoEncoder(nn.Module):
         cross_attn, cross_ff = self.cross_attend_blocks
         x_rel, dist = self.compute_geometry(src_pts=sampled_pc, dst_pts=pc)
 
-        x = cross_attn(sampled_pc_embeddings, context=pc_embeddings, 
+        x = cross_attn(sampled_pc_embeddings, k_feats=pc_embeddings, 
                        x_rel=x_rel, 
                        dist=dist) + sampled_pc_embeddings
         x = cross_ff(x) + x
@@ -291,7 +291,7 @@ class EquivariantAutoEncoder(nn.Module):
 
         x_rel_latent, dist_latent = self.compute_geometry(src_pts=sampled_pc, dst_pts=sampled_pc)
         for self_attn, self_ff in self.layers:
-            x = self_attn(x, context=x, 
+            x = self_attn(x, k_feats=x, 
                         x_rel=x_rel_latent, 
                         dist=dist_latent) + x
             x = self_ff(x) + x
@@ -299,7 +299,7 @@ class EquivariantAutoEncoder(nn.Module):
         queries_embeddings = self.point_embed(queries)
         x_rel_q, dist_q = self.compute_geometry(src_pts=queries, dst_pts=sampled_pc)
 
-        latents = self.dec_cross_attn(queries_embeddings, context=x, 
+        latents = self.dec_cross_attn(queries_embeddings, k_feats=x, 
                                       x_rel=x_rel_q, 
                                       dist=dist_q) + queries_embeddings
         latents = self.dec_cross_ff(latents) + latents
