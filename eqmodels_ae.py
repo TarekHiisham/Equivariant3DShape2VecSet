@@ -120,7 +120,7 @@ class WeightsFeedForward(nn.Module):
         return self.net(x)
 
 class EquivariantAttention(nn.Module):
-  def __init__(self, irreps_dim="64x0e + 32x1o"):
+  def __init__(self, irreps_dim="256x0e + 256x1o"):
     super().__init__()
     self.irreps  = o3.Irreps(irreps_dim)
 
