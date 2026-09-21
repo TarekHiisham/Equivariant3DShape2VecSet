@@ -107,18 +107,6 @@ class EquivariantFeedForward(nn.Module):
     x = self.fc2(x)
     return x
   
-class WeightsFeedForward(nn.Module):
-    def __init__(self, dim, weight_numel):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(1, dim),
-            nn.SiLU(),
-            nn.Linear(dim, weight_numel)
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
 class EquivariantAttention(nn.Module):
   def __init__(self, irreps_dim="256x0e + 256x1o"):
     super().__init__()
@@ -133,17 +121,25 @@ class EquivariantAttention(nn.Module):
         self.irreps,
         self.irreps_sh,
         self.irreps,
-        shared_weights=False,
+        shared_weights=True,
     )
-    self.fc_k = WeightsFeedForward(dim=32, weight_numel=self.to_k.weight_numel)
+    self.fc_k = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.SiLU(),
+            nn.Linear(32, 1)
+        )
 
     self.to_v = o3.FullyConnectedTensorProduct(
         self.irreps,
         self.irreps_sh,
         self.irreps,
-        shared_weights=False,
+        shared_weights=True,
     )
-    self.fc_v = WeightsFeedForward(dim=32, weight_numel=self.to_v.weight_numel)
+    self.fc_v = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.SiLU(),
+            nn.Linear(32, 1)
+        )
 
     self.dot = o3.FullyConnectedTensorProduct(self.irreps, self.irreps, "0e")
 
@@ -159,8 +155,11 @@ class EquivariantAttention(nn.Module):
     k_feats = k_feats.unsqueeze(1).expand(-1, M, -1, -1)          # [B, M, N, irreps_dim]
 
     q = self.to_q(q_feats).unsqueeze(2).expand(-1, -1, N, -1)     # [B, M, N, irreps_dim]
-    k = self.to_k(k_feats, sh, w_k)                               # [B, M, N, irreps_dim]
-    v = self.to_v(k_feats, sh, w_v)                               # [B, M, N, irreps_dim]
+    k = self.to_k(k_feats, sh)                               # [B, M, N, irreps_dim]
+    v = self.to_v(k_feats, sh)                               # [B, M, N, irreps_dim]
+
+    k = k * w_k
+    v = v * w_v
 
     sim = self.dot(q, k).squeeze(-1) * self.scale
     attn = torch.softmax(sim, dim=-1)
