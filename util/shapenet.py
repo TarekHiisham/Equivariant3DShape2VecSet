@@ -23,7 +23,7 @@ class ShapeNet(data.Dataset):
         train_ratio=0.8,
         val_ratio=0.1,
         seed=42,
-        replica=16
+        replica=8
     ):
 
         self.split = split
