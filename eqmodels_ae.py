@@ -202,10 +202,10 @@ class EquivariantAutoEncoder(nn.Module):
     def __init__(
         self,
         *,
-        depth=6,
-        irreps_dim="128x0e + 64x1o",
-        num_inputs = 2048,
-        num_latents = 256,
+        depth=5,
+        irreps_dim="64x0e + 64x1o",
+        num_inputs = 128,
+        num_latents = 128,
     ):
         super().__init__()
 
@@ -343,5 +343,5 @@ def ae_d64_m512(N=2048):
     return create_autoencoder(irreps_dim="32x0e + 32x1o", M=512, N=N, determinisitc=True)
 
 ### Reduced version 
-def ae_d320_m256(N=128):
+def ae_d256_m128(N=128):
     return create_autoencoder(irreps_dim="64x0e + 64x1o", M=128, N=N, determinisitc=True)
