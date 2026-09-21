@@ -344,4 +344,4 @@ def ae_d64_m512(N=2048):
 
 ### Reduced version 
 def ae_d320_m256(N=128):
-    return create_autoencoder(irreps_dim="128x0e + 64x1o", M=128, N=N, determinisitc=True)
+    return create_autoencoder(irreps_dim="64x0e + 64x1o", M=128, N=N, determinisitc=True)
