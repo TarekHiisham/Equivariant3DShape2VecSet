@@ -204,7 +204,7 @@ class EquivariantAutoEncoder(nn.Module):
         *,
         depth=6,
         irreps_dim="128x0e + 64x1o",
-        num_inputs = 512,
+        num_inputs = 2048,
         num_latents = 256,
     ):
         super().__init__()
