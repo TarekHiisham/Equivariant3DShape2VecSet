@@ -74,7 +74,7 @@ class EquivariantPreNorm(nn.Module):
 
 
 class EquivariantFeedForward(nn.Module):
-  def __init__(self, dim="64x0e + 32x1o", mul=2):
+  def __init__(self, dim="32x0e + 16x1o", mul=2):
     super().__init__()
     dim_hid  = re.sub(r'(\d+)x', lambda m: f"{int(m.group(1)) * mul}x",dim)
     self.irreps_in = o3.Irreps(dim)
@@ -108,7 +108,7 @@ class EquivariantFeedForward(nn.Module):
     return x
   
 class EquivariantAttention(nn.Module):
-  def __init__(self, irreps_dim="256x0e + 256x1o"):
+  def __init__(self, irreps_dim="128x0e + 64x1o"):
     super().__init__()
     self.irreps  = o3.Irreps(irreps_dim)
 
@@ -169,7 +169,7 @@ class EquivariantAttention(nn.Module):
     return h_out
 
 class EquivariantPointEmbed(nn.Module):
-    def __init__(self, irreps_dim="128x0e + 42x1o"):
+    def __init__(self, irreps_dim="128x0e + 64x1o"):
         super().__init__()
 
         self.irreps_out = o3.Irreps(irreps_dim)
@@ -178,7 +178,7 @@ class EquivariantPointEmbed(nn.Module):
 
         self.type0Vector = nn.Sequential(
             nn.Linear(1, 32),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Linear(32, self.num_scalars)
         )
 
@@ -202,10 +202,10 @@ class EquivariantAutoEncoder(nn.Module):
     def __init__(
         self,
         *,
-        depth=12,
-        irreps_dim="256x0e + 256x1o",
-        num_inputs = 2048,
-        num_latents = 512,
+        depth=6,
+        irreps_dim="128x0e + 64x1o",
+        num_inputs = 512,
+        num_latents = 256,
     ):
         super().__init__()
 
@@ -310,7 +310,7 @@ class EquivariantAutoEncoder(nn.Module):
 
         return {'logits': o}
 
-def create_autoencoder(irreps_dim="256x0e + 256x1o", M=512, N=2048, determinisitc=True):
+def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=2048, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(
             irreps_dim=irreps_dim,
@@ -341,3 +341,7 @@ def ae_d128_m512(N=2048):
 
 def ae_d64_m512(N=2048):
     return create_autoencoder(irreps_dim="32x0e + 32x1o", M=512, N=N, determinisitc=True)
+
+### Reduced version 
+def ae_d320_m256(N=512):
+    return create_autoencoder(irreps_dim="128x0e + 64x1o", M=256, N=N, determinisitc=True)
