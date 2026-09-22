@@ -32,8 +32,6 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
 
     optimizer.zero_grad()
 
-    kl_weight = 1e-3
-
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
@@ -56,7 +54,7 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         points_rot = torch.einsum('ij, bnj -> bni', R, points)
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast('cuda', enabled=False):
             o = model(surface, points, return_latents=True)
 
             # Invariance results 
@@ -169,16 +167,16 @@ def evaluate(data_loader, model, device):
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
         # compute output
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast('cuda', enabled=False):
 
-            o = model(surface, points)
+            o = model(surface, points, return_latents=True)
             # Invariance results 
-            o_rot = model(surface_rot, points_rot)
+            o_rot = model(surface_rot, points_rot, return_latents=True)
             
-            outputs_rot = o_rot['logits']
-            lat_feat_rot = o_rot['latents']
             outputs = o['logits']
             lat_feat = o['latents']
+            outputs_rot = o_rot['logits']
+            lat_feat_rot = o_rot['latents']
 
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
 
