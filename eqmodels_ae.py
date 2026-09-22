@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 import e3nn.o3 as o3
 import e3nn.nn as enn
 from einops import rearrange
@@ -171,37 +172,57 @@ class EquivariantAttention(nn.Module):
 
         return scalar_sim + vector_sim
 
-    def forward(self, q_feats, k_feats, src_pts, dst_pts, chunk_size=None):
-        B, M, _ = q_feats.shape
+    def _attn_chunk(self, q_chunk, k_feats, src_chunk, dst_pts):
         N = k_feats.shape[1]
+        chunk_len = q_chunk.shape[1]
+
+        x_rel_chunk, dist_chunk = compute_geometry(src_chunk, dst_pts)
+
+        sh = o3.spherical_harmonics(self.irreps_sh, x_rel_chunk, normalize=False)
+        w_k = self.fc_k(dist_chunk)
+        w_v = self.fc_v(dist_chunk)
+
+        k_feats_chunk = k_feats.unsqueeze(1).expand(-1, chunk_len, -1, -1)  # [B, chunk, N, irreps_dim]
+
+        q = self.to_q(q_chunk).unsqueeze(2).expand(-1, -1, N, -1)           # [B, chunk, N, irreps_dim]
+        k = self.to_k(k_feats_chunk, sh)                                    # [B, chunk, N, irreps_dim]
+        v = self.to_v(k_feats_chunk, sh)                                    # [B, chunk, N, irreps_dim]
+
+        k = k * w_k
+        v = v * w_v
+
+        sim = self.invariant_dot(q, k) * self.scale
+        attn = torch.softmax(sim, dim=-1)
+        h_out = torch.einsum('b m n, b m n d -> b m d', attn, v)
+        return h_out
+
+    def forward(self, q_feats, k_feats, src_pts, dst_pts, chunk_size=None, use_checkpoint=None):
+        B, M, _ = q_feats.shape
 
         chunk_size = chunk_size or self.chunk_size
+        # checkpoint chunks during training (grad on); skip during eval,
+        # where no_grad already means nothing gets stored anyway.
+        if use_checkpoint is None:
+            use_checkpoint = self.training and torch.is_grad_enabled()
+
         outputs = []
 
         for start in range(0, M, chunk_size):
             end = min(start + chunk_size, M)
 
             q_chunk = q_feats[:, start:end]
-
             src_chunk = src_pts[:, start:end]
-            x_rel_chunk, dist_chunk = compute_geometry(src_chunk, dst_pts)
 
-            sh = o3.spherical_harmonics(self.irreps_sh, x_rel_chunk, normalize=False)
-            w_k = self.fc_k(dist_chunk)
-            w_v = self.fc_v(dist_chunk)
-
-            k_feats_chunk = k_feats.unsqueeze(1).expand(-1, end-start, -1, -1)  # [B, M, N, irreps_dim]
-
-            q = self.to_q(q_chunk).unsqueeze(2).expand(-1, -1, N, -1)           # [B, M, N, irreps_dim]
-            k = self.to_k(k_feats_chunk, sh)                                    # [B, M, N, irreps_dim]
-            v = self.to_v(k_feats_chunk, sh)                                    # [B, M, N, irreps_dim]
-
-            k = k * w_k
-            v = v * w_v
-
-            sim =  self.invariant_dot(q, k) * self.scale
-            attn = torch.softmax(sim, dim=-1)
-            h_out = torch.einsum('b m n, b m n d -> b m d', attn, v)
+            if use_checkpoint:
+                # discard this chunk's activations after its forward pass;
+                # recompute them during backward instead of holding all
+                # chunks' activations simultaneously for the whole backward.
+                h_out = torch.utils.checkpoint.checkpoint(
+                    self._attn_chunk, q_chunk, k_feats, src_chunk, dst_pts,
+                    use_reentrant=False,
+                )
+            else:
+                h_out = self._attn_chunk(q_chunk, k_feats, src_chunk, dst_pts)
 
             outputs.append(h_out)
 
@@ -245,6 +266,9 @@ class EquivariantAutoEncoder(nn.Module):
         irreps_dim="128x0e + 128x1o",
         num_inputs = 1024,
         num_latents = 512,
+        encoder_chunk_size = 4,     # N = num_inputs 
+        latent_chunk_size = 32,     # N = num_latents (512) 
+        decoder_chunk_size = 32,    # N = num_latents (512) 
     ):
         super().__init__()
 
@@ -255,7 +279,7 @@ class EquivariantAutoEncoder(nn.Module):
         self.point_embed = EquivariantPointEmbed(irreps_dim=irreps_dim)
 
         self.cross_attend_blocks = nn.ModuleList([
-            EquivariantPreNorm(irreps_dim, EquivariantAttention(irreps_dim=irreps_dim), context_irreps=irreps_dim),
+            EquivariantPreNorm(irreps_dim, EquivariantAttention(irreps_dim=irreps_dim, chunk_size=encoder_chunk_size), context_irreps=irreps_dim),
             EquivariantPreNorm(irreps_dim, EquivariantFeedForward(dim=irreps_dim, mul=2))
         ])
 
@@ -263,7 +287,7 @@ class EquivariantAutoEncoder(nn.Module):
             nn.ModuleList([
                 EquivariantPreNorm(
                     irreps_dim,
-                    EquivariantAttention(irreps_dim=irreps_dim)
+                    EquivariantAttention(irreps_dim=irreps_dim, chunk_size=latent_chunk_size)
                 ),
                 EquivariantPreNorm(
                     irreps_dim,
@@ -273,7 +297,7 @@ class EquivariantAutoEncoder(nn.Module):
             for _ in range(depth)
         ])
 
-        self.dec_cross_attn = EquivariantPreNorm(irreps_dim, EquivariantAttention(irreps_dim=irreps_dim), context_irreps=irreps_dim)
+        self.dec_cross_attn = EquivariantPreNorm(irreps_dim, EquivariantAttention(irreps_dim=irreps_dim, chunk_size=decoder_chunk_size), context_irreps=irreps_dim)
         self.dec_cross_ff = EquivariantPreNorm(irreps_dim, EquivariantFeedForward(dim=irreps_dim, mul=2))
 
         self.to_outputs = o3.Linear(o3.Irreps(irreps_dim), o3.Irreps("1x0e"))
