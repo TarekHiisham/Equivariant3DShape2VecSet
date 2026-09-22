@@ -16,7 +16,7 @@ import e3nn.o3 as o3
 import util.misc as misc
 import util.lr_sched as lr_sched
 
-num_sample = 1024
+num_sample = 512
 
 def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
