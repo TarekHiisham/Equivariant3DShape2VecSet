@@ -141,8 +141,6 @@ class EquivariantAttention(nn.Module):
                 nn.Linear(32, 1)
             )
 
-        self.dot = o3.FullyConnectedTensorProduct(self.irreps, self.irreps, "0e")
-
     def invariant_dot(self, q, k):
         ns = self.irreps.count("0e")
         nv = self.irreps.count("1o")
@@ -166,7 +164,7 @@ class EquivariantAttention(nn.Module):
         B, M, _ = q_feats.shape
         N = k_feats.shape[1]
 
-        chunk_size = 32
+        chunk_size = 8
         outputs = []
 
         for start in range(0, M, chunk_size):
