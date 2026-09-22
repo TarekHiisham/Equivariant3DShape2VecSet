@@ -164,7 +164,7 @@ class EquivariantAttention(nn.Module):
         B, M, _ = q_feats.shape
         N = k_feats.shape[1]
 
-        chunk_size = 8
+        chunk_size = 4
         outputs = []
 
         for start in range(0, M, chunk_size):
@@ -229,7 +229,7 @@ class EquivariantAutoEncoder(nn.Module):
     def __init__(
         self,
         *,
-        depth=5,
+        depth=4,
         irreps_dim="64x0e + 64x1o",
         num_inputs = 512,
         num_latents = 512,
@@ -341,7 +341,7 @@ class EquivariantAutoEncoder(nn.Module):
         else:
             return {'logits': o}
         
-def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=2048, determinisitc=True):
+def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=512, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(
             irreps_dim=irreps_dim,

@@ -76,58 +76,6 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
           
             loss = loss_vol + loss_lat + 0.1 * loss_near
 
-            print("\n========== DEBUG ==========")
-
-            print(
-                "outputs logits finite:",
-                torch.isfinite(outputs).all().item()
-            )
-
-            print(
-                "outputs_rot logits finite:",
-                torch.isfinite(outputs_rot).all().item()
-            )
-
-            print(
-                "latents finite:",
-                torch.isfinite(lat_feat).all().item()
-            )
-
-            print(
-                "latents_rot finite:",
-                torch.isfinite(lat_feat_rot).all().item()
-            )
-
-            print(
-                "D finite:",
-                torch.isfinite(D).all().item()
-            )
-
-            print(
-                "lat_feat_expected finite:",
-                torch.isfinite(lat_feat_expected).all().item()
-            )
-
-            print(
-                "loss_vol:",
-                loss_vol.item()
-            )
-
-            print(
-                "loss_near:",
-                loss_near.item()
-            )
-
-            print(
-                "loss_lat:",
-                loss_lat.item()
-            )
-            print(
-                "total loss:",
-                loss.item()
-            )
-
-            print("============================\n")
         loss_value = loss.item()
 
         threshold = 0
