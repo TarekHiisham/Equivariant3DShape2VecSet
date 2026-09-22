@@ -222,10 +222,14 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 1 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
+            # delete the previous epoch's checkpoint to save disk space
+            prev_ckpt = Path(args.output_dir) / f'checkpoint-{epoch - 1}.pth'
+            if prev_ckpt.exists():
+                prev_ckpt.unlink()
 
         if epoch % 5 == 0 or epoch + 1 == args.epochs:
             test_stats = evaluate(data_loader_val, model, device)
