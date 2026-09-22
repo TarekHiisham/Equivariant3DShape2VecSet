@@ -68,22 +68,13 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
             lat_feat = o['latents']
             lat_feat_rot = o_rot['latents']
 
-            if 'kl' in outputs:
-                loss_kl = outputs['kl']
-                loss_kl = torch.sum(loss_kl) / loss_kl.shape[0]
-            else:
-                loss_kl = None
-
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
 
             loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
             loss_vol = criterion(outputs[:, :num_sample], outputs_rot[:, :num_sample], labels[:, :num_sample])
             loss_near = criterion(outputs[:, num_sample:], outputs_rot[:, num_sample:], labels[:, num_sample:])
-            
-            if loss_kl is not None:
-                loss = loss_vol + 0.1 * loss_near + kl_weight * loss_kl
-            else:
-                loss = loss_vol + loss_lat + 0.1 * loss_near
+          
+            loss = loss_vol + loss_lat + 0.1 * loss_near
 
         loss_value = loss.item()
 
@@ -116,9 +107,6 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
 
         metric_logger.update(loss_vol=loss_vol.item())
         metric_logger.update(loss_near=loss_near.item())
-
-        if loss_kl is not None:
-            metric_logger.update(loss_kl=loss_kl.item())
 
         metric_logger.update(iou=iou.item())
 
@@ -192,14 +180,7 @@ def evaluate(data_loader, model, device):
             outputs = o['logits']
             lat_feat = o['latents']
 
-            if 'kl' in outputs:
-                loss_kl = outputs['kl']
-                loss_kl = torch.sum(loss_kl) / loss_kl.shape[0]
-            else:
-                loss_kl = None
-
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
-
 
             loss = criterion(outputs, outputs_rot, labels)
             loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
@@ -221,9 +202,6 @@ def evaluate(data_loader, model, device):
         batch_size = points.shape[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['iou'].update(iou.item(), n=batch_size)
-
-        if loss_kl is not None:
-            metric_logger.update(loss_kl=loss_kl.item())
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
