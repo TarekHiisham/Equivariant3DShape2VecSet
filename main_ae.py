@@ -23,7 +23,7 @@ from engine_eqae import train_one_epoch, evaluate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Autoencoder', add_help=False)
-    parser.add_argument('--batch_size', default=16, type=int,
+    parser.add_argument('--batch_size', default=4, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
