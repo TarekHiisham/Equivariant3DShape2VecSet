@@ -108,65 +108,85 @@ class EquivariantFeedForward(nn.Module):
     return x
   
 class EquivariantAttention(nn.Module):
-  def __init__(self, irreps_dim="128x0e + 64x1o"):
-    super().__init__()
-    self.irreps  = o3.Irreps(irreps_dim)
+    def __init__(self, irreps_dim="128x0e + 64x1o"):
+        super().__init__()
+        self.irreps  = o3.Irreps(irreps_dim)
 
-    self.scale = (self.irreps.dim) ** -0.5
-    self.irreps_sh = o3.Irreps.spherical_harmonics(lmax=1)
+        self.scale = (self.irreps.dim) ** -0.5
+        self.irreps_sh = o3.Irreps.spherical_harmonics(lmax=1)
 
-    self.to_q = o3.Linear(self.irreps, self.irreps)
+        self.to_q = o3.Linear(self.irreps, self.irreps)
 
-    self.to_k = o3.FullyConnectedTensorProduct(
-        self.irreps,
-        self.irreps_sh,
-        self.irreps,
-        shared_weights=True,
-    )
-    self.fc_k = nn.Sequential(
-            nn.Linear(1, 32),
-            nn.SiLU(),
-            nn.Linear(32, 1)
+        self.to_k = o3.FullyConnectedTensorProduct(
+            self.irreps,
+            self.irreps_sh,
+            self.irreps,
+            shared_weights=True,
         )
+        self.fc_k = nn.Sequential(
+                nn.Linear(1, 32),
+                nn.SiLU(),
+                nn.Linear(32, 1)
+            )
 
-    self.to_v = o3.FullyConnectedTensorProduct(
-        self.irreps,
-        self.irreps_sh,
-        self.irreps,
-        shared_weights=True,
-    )
-    self.fc_v = nn.Sequential(
-            nn.Linear(1, 32),
-            nn.SiLU(),
-            nn.Linear(32, 1)
+        self.to_v = o3.FullyConnectedTensorProduct(
+            self.irreps,
+            self.irreps_sh,
+            self.irreps,
+            shared_weights=True,
         )
+        self.fc_v = nn.Sequential(
+                nn.Linear(1, 32),
+                nn.SiLU(),
+                nn.Linear(32, 1)
+            )
 
-    self.dot = o3.FullyConnectedTensorProduct(self.irreps, self.irreps, "0e")
+        self.dot = o3.FullyConnectedTensorProduct(self.irreps, self.irreps, "0e")
 
-  def forward(self, q_feats, k_feats, x_rel, dist):
-    B, M, _ = q_feats.shape
-    N = k_feats.shape[1]
+    def invariant_dot(self, q, k):
+        ns = self.irreps.count("0e")
+        nv = self.irreps.count("1o")
 
-    sh = o3.spherical_harmonics(self.irreps_sh, x_rel, normalize=False)
-    w_k = self.fc_k(dist)
-    w_v = self.fc_v(dist)
+        q_s = q[..., :ns]
+        k_s = k[..., :ns]
+
+        scalar_sim = (q_s * k_s).sum(dim=-1)
+
+        if nv > 0:
+            q_v = q[..., ns:].reshape(*q.shape[:-1], nv, 3)
+            k_v = k[..., ns:].reshape(*k.shape[:-1], nv, 3)
+
+            vector_sim = (q_v * k_v).sum(dim=(-1, -2))
+        else:
+            vector_sim = 0.0
+
+        return scalar_sim + vector_sim
+
+    def forward(self, q_feats, k_feats, x_rel, dist):
+        B, M, _ = q_feats.shape
+        N = k_feats.shape[1]
+
+        sh = o3.spherical_harmonics(self.irreps_sh, x_rel, normalize=False)
+        w_k = self.fc_k(dist)
+        w_v = self.fc_v(dist)
 
 
-    k_feats = k_feats.unsqueeze(1).expand(-1, M, -1, -1)          # [B, M, N, irreps_dim]
+        k_feats = k_feats.unsqueeze(1).expand(-1, M, -1, -1)          # [B, M, N, irreps_dim]
 
-    q = self.to_q(q_feats).unsqueeze(2).expand(-1, -1, N, -1)     # [B, M, N, irreps_dim]
-    k = self.to_k(k_feats, sh)                               # [B, M, N, irreps_dim]
-    v = self.to_v(k_feats, sh)                               # [B, M, N, irreps_dim]
+        q = self.to_q(q_feats).unsqueeze(2).expand(-1, -1, N, -1)     # [B, M, N, irreps_dim]
+        k = self.to_k(k_feats, sh)                                    # [B, M, N, irreps_dim]
+        v = self.to_v(k_feats, sh)                                    # [B, M, N, irreps_dim]
 
-    k = k * w_k
-    v = v * w_v
+        k = k * w_k
+        v = v * w_v
 
-    sim = self.dot(q, k).squeeze(-1) * self.scale
-    attn = torch.softmax(sim, dim=-1)
+        sim =  self.invariant_dot(q, k) * self.scale
 
-    h_out = torch.einsum('b m n, b m n d -> b m d', attn, v)
+        attn = torch.softmax(sim, dim=-1)
 
-    return h_out
+        h_out = torch.einsum('b m n, b m n d -> b m d', attn, v)
+
+        return h_out
 
 class EquivariantPointEmbed(nn.Module):
     def __init__(self, irreps_dim="128x0e + 64x1o"):
@@ -204,8 +224,8 @@ class EquivariantAutoEncoder(nn.Module):
         *,
         depth=5,
         irreps_dim="64x0e + 64x1o",
-        num_inputs = 128,
-        num_latents = 128,
+        num_inputs = 512,
+        num_latents = 512,
     ):
         super().__init__()
 
@@ -320,28 +340,9 @@ def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=2048, determinisitc
     return model
 
 ###
-def ae_d512_m512(N=2048):
-    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=512, N=N, determinisitc=True)
-
-def ae_d512_m256(N=2048):
-    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=256, N=N, determinisitc=True)
-
-def ae_d512_m128(N=2048):
-    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=128, N=N, determinisitc=True)
-
-def ae_d512_m64(N=2048):
-    return create_autoencoder(irreps_dim="256x0e + 256x1o", M=64, N=N, determinisitc=True)
-
-###
-def ae_d256_m512(N=2048):
-    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=N, determinisitc=True)
-
-def ae_d128_m512(N=2048):
-    return create_autoencoder(irreps_dim="64x0e + 64x1o", M=512, N=N, determinisitc=True)
-
-def ae_d64_m512(N=2048):
-    return create_autoencoder(irreps_dim="32x0e + 32x1o", M=512, N=N, determinisitc=True)
+def ae_d512_m256(N=512):
+    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=256, N=N, determinisitc=True)
 
 ### Reduced version 
-def ae_d256_m128(N=128):
+def ae_d256_m128(N=256):
     return create_autoencoder(irreps_dim="64x0e + 64x1o", M=128, N=N, determinisitc=True)

@@ -30,10 +30,10 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='ae_d256_m128', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='ae_d512_m256', type=str, metavar='MODEL',
                         help='Name of model to train')
 
-    parser.add_argument('--point_cloud_size', default=128, type=int,
+    parser.add_argument('--point_cloud_size', default=512, type=int,
                         help='input size')
 
     # Optimizer parameters
