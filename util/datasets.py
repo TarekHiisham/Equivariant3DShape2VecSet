@@ -33,7 +33,7 @@ def build_shape_surface_occupancy_dataset(split, args):
     elif split == 'val':
         # return ShapeNet(args.data_path, split=split, transform=None, sampling=True, num_samples=1024, return_surface=True, surface_sampling=True, pc_size=args.point_cloud_size)
         return ShapeNet(args.mesh_folder, args.point_folder,
-                        split=split, transform=None, sampling=False, return_surface=True, surface_sampling=True, pc_size=args.point_cloud_size)
+                        split=split, transform=None, sampling=True, num_samples=1024, return_surface=True, surface_sampling=True, pc_size=args.point_cloud_size)
     else:
         return ShapeNet(args.mesh_folder, args.point_folder,
-                        split=split, transform=None, sampling=False, return_surface=True, surface_sampling=True, pc_size=args.point_cloud_size)
+                        split=split, transform=None, sampling=True, num_samples=1024, return_surface=True, surface_sampling=True, pc_size=args.point_cloud_size)

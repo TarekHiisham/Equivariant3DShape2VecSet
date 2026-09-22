@@ -150,10 +150,8 @@ def main(args):
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
-        # batch_size=args.batch_size,
-        batch_size=1,
-        # num_workers=args.num_workers,
-        num_workers=1,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
         pin_memory=args.pin_mem,
         drop_last=False
     )
