@@ -56,7 +56,7 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         points_rot = torch.einsum('ij, bnj -> bni', R, points)
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
-        with torch.autocast(device_type='cuda', dtype=torch.float16):
+        with torch.cuda.amp.autocast(enabled=False):
             o = model(surface, points, return_latents=True)
 
             # Invariance results 

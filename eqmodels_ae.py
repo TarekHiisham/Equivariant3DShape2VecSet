@@ -166,7 +166,7 @@ class EquivariantAttention(nn.Module):
         B, M, _ = q_feats.shape
         N = k_feats.shape[1]
 
-        chunk_size = 16
+        chunk_size = 32
         outputs = []
 
         for start in range(0, M, chunk_size):
@@ -180,9 +180,9 @@ class EquivariantAttention(nn.Module):
             w_k = self.fc_k(dist_chunk)
             w_v = self.fc_v(dist_chunk)
 
-            k_feats_chunk = k_feats.unsqueeze(1).expand(-1, end-start, -1, -1) # [B, M, N, irreps_dim]
+            k_feats_chunk = k_feats.unsqueeze(1).expand(-1, end-start, -1, -1)  # [B, M, N, irreps_dim]
 
-            q = self.to_q(q_chunk).unsqueeze(2).expand(-1, -1, N, -1)     # [B, M, N, irreps_dim]
+            q = self.to_q(q_chunk).unsqueeze(2).expand(-1, -1, N, -1)           # [B, M, N, irreps_dim]
             k = self.to_k(k_feats_chunk, sh)                                    # [B, M, N, irreps_dim]
             v = self.to_v(k_feats_chunk, sh)                                    # [B, M, N, irreps_dim]
 
