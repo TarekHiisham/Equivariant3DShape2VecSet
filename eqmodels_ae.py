@@ -345,7 +345,7 @@ class EquivariantAutoEncoder(nn.Module):
         else:
             return {'logits': o}
         
-def create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=2048, determinisitc=True):
+def create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=1024, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(
             irreps_dim=irreps_dim,
@@ -355,7 +355,7 @@ def create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=2048, determinisit
     return model
 
 ###
-def ae_d512_m512(N=2048):
+def ae_d512_m512(N=1024):
     return create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=N, determinisitc=True)
 
 ### Reduced version 

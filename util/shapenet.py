@@ -14,7 +14,7 @@ class ShapeNet(data.Dataset):
         point_folder,
         split='train',
         category_id='03797390',
-        num_samples=1024,
+        num_samples=512,
         pc_size=1024,
         return_surface=True,
         surface_sampling=True,
