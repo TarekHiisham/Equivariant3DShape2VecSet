@@ -16,6 +16,7 @@ import e3nn.o3 as o3
 import util.misc as misc
 import util.lr_sched as lr_sched
 
+num_sample = 256
 
 def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -55,12 +56,17 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         points_rot = torch.einsum('ij, bnj -> bni', R, points)
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
-        with torch.cuda.amp.autocast(enabled=True):
-
-            outputs = model(surface, points, return_latents=True)
+        with torch.autocast(device_type='cuda', dtype=torch.float16):
+            o = model(surface, points, return_latents=True)
 
             # Invariance results 
-            outputs_rot = model(surface_rot, points_rot, return_latents=True)
+            o_rot = model(surface_rot, points_rot, return_latents=True)
+
+            outputs = o['logits']
+            outputs_rot = o_rot['logits']
+
+            lat_feat = o['latents']
+            lat_feat_rot = o_rot['latents']
 
             if 'kl' in outputs:
                 loss_kl = outputs['kl']
@@ -69,15 +75,10 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
                 loss_kl = None
 
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
-            outputs = outputs['logits']
-            outputs_rot = outputs_rot['logits']
-
-            lat_feat = outputs['latents']
-            lat_feat_rot = outputs_rot['latents']
 
             loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
-            loss_vol = criterion(outputs[:, :1024], outputs_rot[:, :1024], labels[:, :1024])
-            loss_near = criterion(outputs[:, 1024:], outputs_rot[:, 1024:], labels[:, 1024:])
+            loss_vol = criterion(outputs[:, :num_sample], outputs_rot[:, :num_sample], labels[:, :num_sample])
+            loss_near = criterion(outputs[:, num_sample:], outputs_rot[:, num_sample:], labels[:, num_sample:])
             
             if loss_kl is not None:
                 loss = loss_vol + 0.1 * loss_near + kl_weight * loss_kl
@@ -91,10 +92,10 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         pred = torch.zeros_like(outputs[:, :1024])
         pred[outputs[:, :1024]>=threshold] = 1
 
-        accuracy = (pred==labels[:, :1024]).float().sum(dim=1) / labels[:, :1024].shape[1]
+        accuracy = (pred==labels[:, :num_sample]).float().sum(dim=1) / labels[:, :num_sample].shape[1]
         accuracy = accuracy.mean()
-        intersection = (pred * labels[:, :1024]).sum(dim=1)
-        union = (pred + labels[:, :1024]).gt(0).sum(dim=1) + 1e-5
+        intersection = (pred * labels[:, :num_sample]).sum(dim=1)
+        union = (pred + labels[:, :num_sample]).gt(0).sum(dim=1) + 1e-5
         iou = intersection * 1.0 / union
         iou = iou.mean()
 
@@ -182,24 +183,23 @@ def evaluate(data_loader, model, device):
         # compute output
         with torch.cuda.amp.autocast(enabled=False):
 
-            outputs = model(surface, points)
-
+            o = model(surface, points)
             # Invariance results 
-            outputs_rot = model(surface_rot, points_rot)
+            o_rot = model(surface_rot, points_rot)
+            
+            outputs_rot = o_rot['logits']
+            lat_feat_rot = o_rot['latents']
+            outputs = o['logits']
+            lat_feat = o['latents']
 
             if 'kl' in outputs:
                 loss_kl = outputs['kl']
                 loss_kl = torch.sum(loss_kl) / loss_kl.shape[0]
             else:
                 loss_kl = None
-                
-            lat_feat = outputs['latents']
-            lat_feat_rot = outputs_rot['latents']
 
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
 
-            outputs_rot = outputs_rot['logits']
-            outputs = outputs['logits']
 
             loss = criterion(outputs, outputs_rot, labels)
             loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)

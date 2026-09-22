@@ -166,27 +166,36 @@ class EquivariantAttention(nn.Module):
         B, M, _ = q_feats.shape
         N = k_feats.shape[1]
 
-        sh = o3.spherical_harmonics(self.irreps_sh, x_rel, normalize=False)
-        w_k = self.fc_k(dist)
-        w_v = self.fc_v(dist)
+        chunk_size = 16
+        outputs = []
 
+        for start in range(0, M, chunk_size):
+            end = min(start + chunk_size, M)
 
-        k_feats = k_feats.unsqueeze(1).expand(-1, M, -1, -1)          # [B, M, N, irreps_dim]
+            q_chunk = q_feats[:, start:end]
+            x_rel_chunk = x_rel[:, start:end]
+            dist_chunk = dist[:, start:end]
 
-        q = self.to_q(q_feats).unsqueeze(2).expand(-1, -1, N, -1)     # [B, M, N, irreps_dim]
-        k = self.to_k(k_feats, sh)                                    # [B, M, N, irreps_dim]
-        v = self.to_v(k_feats, sh)                                    # [B, M, N, irreps_dim]
+            sh = o3.spherical_harmonics(self.irreps_sh, x_rel_chunk, normalize=False)
+            w_k = self.fc_k(dist_chunk)
+            w_v = self.fc_v(dist_chunk)
 
-        k = k * w_k
-        v = v * w_v
+            k_feats_chunk = k_feats.unsqueeze(1).expand(-1, end-start, -1, -1) # [B, M, N, irreps_dim]
 
-        sim =  self.invariant_dot(q, k) * self.scale
+            q = self.to_q(q_chunk).unsqueeze(2).expand(-1, -1, N, -1)     # [B, M, N, irreps_dim]
+            k = self.to_k(k_feats_chunk, sh)                                    # [B, M, N, irreps_dim]
+            v = self.to_v(k_feats_chunk, sh)                                    # [B, M, N, irreps_dim]
 
-        attn = torch.softmax(sim, dim=-1)
+            k = k * w_k
+            v = v * w_v
 
-        h_out = torch.einsum('b m n, b m n d -> b m d', attn, v)
+            sim =  self.invariant_dot(q, k) * self.scale
+            attn = torch.softmax(sim, dim=-1)
+            h_out = torch.einsum('b m n, b m n d -> b m d', attn, v)
 
-        return h_out
+            outputs.append(h_out)
+
+        return torch.cat(outputs, dim=1)
 
 class EquivariantPointEmbed(nn.Module):
     def __init__(self, irreps_dim="128x0e + 64x1o"):

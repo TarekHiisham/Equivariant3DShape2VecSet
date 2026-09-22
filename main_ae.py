@@ -23,14 +23,14 @@ from engine_eqae import train_one_epoch, evaluate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Autoencoder', add_help=False)
-    parser.add_argument('--batch_size', default=16, type=int,
+    parser.add_argument('--batch_size', default=8, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='ae_d512_m256', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='ae_d256_m128', type=str, metavar='MODEL',
                         help='Name of model to train')
 
     parser.add_argument('--point_cloud_size', default=512, type=int,
