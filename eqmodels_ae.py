@@ -323,13 +323,17 @@ class EquivariantAutoEncoder(nn.Module):
         out_logits = self.to_outputs(latents)
         return out_logits
 
-    def forward(self, pc, queries):
+    def forward(self, pc, queries, return_latents=False):
         latents, sampled_pc = self.encode(pc)
 
         o = self.decode(latents, sampled_pc, queries).squeeze(-1)
 
-        return {'logits': o}
-
+        if return_latents:
+            return {'logits': o, 
+                    'latents': latents}
+        else:
+            return {'logits': o}
+        
 def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=2048, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(

@@ -55,14 +55,12 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         points_rot = torch.einsum('ij, bnj -> bni', R, points)
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
-        with torch.cuda.amp.autocast(enabled=False):
-            lat_feat, _ = model.encode(surface)
-            outputs = model(surface, points)
+        with torch.cuda.amp.autocast(enabled=True):
 
-            # Equivariance results
-            lat_feat_rot, _ = model.encode(surface_rot)
+            outputs = model(surface, points, return_latents=True)
+
             # Invariance results 
-            outputs_rot = model(surface_rot, points_rot)
+            outputs_rot = model(surface_rot, points_rot, return_latents=True)
 
             if 'kl' in outputs:
                 loss_kl = outputs['kl']
@@ -73,6 +71,9 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
             outputs = outputs['logits']
             outputs_rot = outputs_rot['logits']
+
+            lat_feat = outputs['latents']
+            lat_feat_rot = outputs_rot['latents']
 
             loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
             loss_vol = criterion(outputs[:, :1024], outputs_rot[:, :1024], labels[:, :1024])
@@ -181,11 +182,8 @@ def evaluate(data_loader, model, device):
         # compute output
         with torch.cuda.amp.autocast(enabled=False):
 
-            lat_feat, _ = model.encode(surface)
             outputs = model(surface, points)
 
-            # Equivariance results
-            lat_feat_rot, _ = model.encode(surface_rot)
             # Invariance results 
             outputs_rot = model(surface_rot, points_rot)
 
@@ -194,8 +192,12 @@ def evaluate(data_loader, model, device):
                 loss_kl = torch.sum(loss_kl) / loss_kl.shape[0]
             else:
                 loss_kl = None
+                
+            lat_feat = outputs['latents']
+            lat_feat_rot = outputs_rot['latents']
 
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
+
             outputs_rot = outputs_rot['logits']
             outputs = outputs['logits']
 
