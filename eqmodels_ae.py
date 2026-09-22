@@ -107,10 +107,21 @@ class EquivariantFeedForward(nn.Module):
     x = self.fc2(x)
     return x
   
+def compute_geometry(src_pts, dst_pts):
+    diff = src_pts.unsqueeze(2) - dst_pts.unsqueeze(1)  # [B, chunk, N, 3]
+    dist = torch.norm(diff, dim=-1, keepdim=True)
+    dist = dist.clone()
+    dist[dist == 0] = 1.0
+    x_rel = diff / dist
+    return x_rel, dist
+
+
 class EquivariantAttention(nn.Module):
-    def __init__(self, irreps_dim="128x0e + 64x1o"):
+    def __init__(self, irreps_dim="128x0e + 128x1o", chunk_size=4):
         super().__init__()
         self.irreps  = o3.Irreps(irreps_dim)
+        
+        self.chunk_size = chunk_size
 
         self.scale = (self.irreps.dim) ** -0.5
         self.irreps_sh = o3.Irreps.spherical_harmonics(lmax=1)
@@ -160,19 +171,20 @@ class EquivariantAttention(nn.Module):
 
         return scalar_sim + vector_sim
 
-    def forward(self, q_feats, k_feats, x_rel, dist):
+    def forward(self, q_feats, k_feats, src_pts, dst_pts, chunk_size=None):
         B, M, _ = q_feats.shape
         N = k_feats.shape[1]
 
-        chunk_size = 4
+        chunk_size = chunk_size or self.chunk_size
         outputs = []
 
         for start in range(0, M, chunk_size):
             end = min(start + chunk_size, M)
 
             q_chunk = q_feats[:, start:end]
-            x_rel_chunk = x_rel[:, start:end]
-            dist_chunk = dist[:, start:end]
+
+            src_chunk = src_pts[:, start:end]
+            x_rel_chunk, dist_chunk = compute_geometry(src_chunk, dst_pts)
 
             sh = o3.spherical_harmonics(self.irreps_sh, x_rel_chunk, normalize=False)
             w_k = self.fc_k(dist_chunk)
@@ -196,7 +208,7 @@ class EquivariantAttention(nn.Module):
         return torch.cat(outputs, dim=1)
 
 class EquivariantPointEmbed(nn.Module):
-    def __init__(self, irreps_dim="128x0e + 64x1o"):
+    def __init__(self, irreps_dim="128x0e + 128x1o"):
         super().__init__()
 
         self.irreps_out = o3.Irreps(irreps_dim)
@@ -230,8 +242,8 @@ class EquivariantAutoEncoder(nn.Module):
         self,
         *,
         depth=4,
-        irreps_dim="64x0e + 64x1o",
-        num_inputs = 512,
+        irreps_dim="128x0e + 128x1o",
+        num_inputs = 1024,
         num_latents = 512,
     ):
         super().__init__()
@@ -268,12 +280,7 @@ class EquivariantAutoEncoder(nn.Module):
 
     @staticmethod
     def compute_geometry(src_pts, dst_pts):
-        diff = src_pts.unsqueeze(2) - dst_pts.unsqueeze(1)  # [B, M, N, 3]
-        dist = torch.norm(diff, dim=-1, keepdim=True)
-        dist = dist.clone()
-        dist[dist == 0] = 1.0
-        x_rel = diff / dist
-        return x_rel, dist
+        return compute_geometry(src_pts, dst_pts)
 
     def encode(self, pc):
         # pc: B x N x 3
@@ -300,11 +307,10 @@ class EquivariantAutoEncoder(nn.Module):
         pc_embeddings = self.point_embed(pc)
 
         cross_attn, cross_ff = self.cross_attend_blocks
-        x_rel, dist = self.compute_geometry(src_pts=sampled_pc, dst_pts=pc)
 
-        x = cross_attn(sampled_pc_embeddings, k_feats=pc_embeddings, 
-                       x_rel=x_rel, 
-                       dist=dist) + sampled_pc_embeddings
+        x = cross_attn(sampled_pc_embeddings, k_feats=pc_embeddings,
+                       src_pts=sampled_pc,
+                       dst_pts=pc) + sampled_pc_embeddings
         x = cross_ff(x) + x
 
         return x, sampled_pc
@@ -312,19 +318,17 @@ class EquivariantAutoEncoder(nn.Module):
 
     def decode(self, x, sampled_pc, queries):
 
-        x_rel_latent, dist_latent = self.compute_geometry(src_pts=sampled_pc, dst_pts=sampled_pc)
         for self_attn, self_ff in self.layers:
-            x = self_attn(x, k_feats=x, 
-                        x_rel=x_rel_latent, 
-                        dist=dist_latent) + x
+            x = self_attn(x, k_feats=x,
+                        src_pts=sampled_pc,
+                        dst_pts=sampled_pc) + x
             x = self_ff(x) + x
 
         queries_embeddings = self.point_embed(queries)
-        x_rel_q, dist_q = self.compute_geometry(src_pts=queries, dst_pts=sampled_pc)
 
-        latents = self.dec_cross_attn(queries_embeddings, k_feats=x, 
-                                      x_rel=x_rel_q, 
-                                      dist=dist_q) + queries_embeddings
+        latents = self.dec_cross_attn(queries_embeddings, k_feats=x,
+                                      src_pts=queries,
+                                      dst_pts=sampled_pc) + queries_embeddings
         latents = self.dec_cross_ff(latents) + latents
 
         out_logits = self.to_outputs(latents)
@@ -341,7 +345,7 @@ class EquivariantAutoEncoder(nn.Module):
         else:
             return {'logits': o}
         
-def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=512, determinisitc=True):
+def create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=2048, determinisitc=True):
     if determinisitc:
         model = EquivariantAutoEncoder(
             irreps_dim=irreps_dim,
@@ -351,8 +355,8 @@ def create_autoencoder(irreps_dim="128x0e + 64x1o", M=512, N=512, determinisitc=
     return model
 
 ###
-def ae_d512_m256(N=512):
-    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=256, N=N, determinisitc=True)
+def ae_d512_m512(N=2048):
+    return create_autoencoder(irreps_dim="128x0e + 128x1o", M=512, N=N, determinisitc=True)
 
 ### Reduced version 
 def ae_d256_m128(N=512):

@@ -16,7 +16,7 @@ import e3nn.o3 as o3
 import util.misc as misc
 import util.lr_sched as lr_sched
 
-num_sample = 256
+num_sample = 1024
 
 def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -167,7 +167,7 @@ def evaluate(data_loader, model, device):
         surface_rot = torch.einsum('ij, bnj -> bni', R, surface)
 
         # compute output
-        with torch.amp.autocast('cuda', enabled=False):
+        with torch.amp.autocast('cuda', enabled=True):
 
             o = model(surface, points, return_latents=True)
             # Invariance results 
