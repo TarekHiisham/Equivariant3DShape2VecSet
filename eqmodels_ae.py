@@ -117,7 +117,7 @@ def compute_geometry(src_pts, dst_pts):
 
 
 class EquivariantAttention(nn.Module):
-    def __init__(self, irreps_dim="128x0e + 128x1o", chunk_size=4):
+    def __init__(self, irreps_dim="128x0e + 128x1o", chunk_size=2):
         super().__init__()
         self.irreps  = o3.Irreps(irreps_dim)
         
