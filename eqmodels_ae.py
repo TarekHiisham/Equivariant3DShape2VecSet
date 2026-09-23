@@ -229,7 +229,7 @@ class EquivariantAttention(nn.Module):
         return torch.cat(outputs, dim=1)
 
 class EquivariantPointEmbed(nn.Module):
-    def __init__(self, irreps_dim="128x0e + 128x1o"):
+    def __init__(self, irreps_dim="64x0e + 32x1o"):
         super().__init__()
 
         self.irreps_out = o3.Irreps(irreps_dim)
@@ -262,7 +262,7 @@ class EquivariantAutoEncoder(nn.Module):
     def __init__(
         self,
         *,
-        depth=4,
+        depth=16,
         irreps_dim="128x0e + 128x1o",
         num_inputs = 1024,
         num_latents = 512,
