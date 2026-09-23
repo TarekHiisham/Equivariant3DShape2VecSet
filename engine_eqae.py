@@ -69,10 +69,10 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
 
             loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
-            loss_vol = criterion(outputs[:, :num_sample], outputs_rot[:, :num_sample], labels[:, :num_sample])
-            loss_near = criterion(outputs[:, num_sample:], outputs_rot[:, num_sample:], labels[:, num_sample:])
+            loss_vol, loss_vol_inv = criterion(outputs[:, :num_sample], outputs_rot[:, :num_sample], labels[:, :num_sample])
+            loss_near, loss_near_inv = criterion(outputs[:, num_sample:], outputs_rot[:, num_sample:], labels[:, num_sample:])
           
-            loss = loss_vol + loss_lat + 0.1 * loss_near
+            loss = loss_vol + 10*(loss_vol_inv+loss_lat) + 0.1 * loss_near
 
         loss_value = loss.item()
 
@@ -102,6 +102,10 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         torch.cuda.synchronize()
 
         metric_logger.update(loss=loss_value)
+
+        # Check the property of IN/EQ
+        metric_logger.update(latent_equ_err=loss_lat.item())
+        metric_logger.update(logits_inv_err=loss_vol_inv.item())
 
         metric_logger.update(loss_vol=loss_vol.item())
         metric_logger.update(loss_near=loss_near.item())
@@ -140,10 +144,10 @@ def evaluate(data_loader, model, device):
         )
 
         loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
-        return loss_bce + 10 * loss_inv
+        return loss_bce, loss_inv
     
     def criterion_lat(lat_feat_expected, lat_feat_rot):
-        return 2 * torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
+        return torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
 
     metric_logger = misc.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -180,10 +184,10 @@ def evaluate(data_loader, model, device):
 
             lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
 
-            loss = criterion(outputs, outputs_rot, labels)
-            loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
+            loss, loss_inv = criterion(outputs, outputs_rot, labels)
+            loss_equ_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
 
-            loss = loss + loss_lat
+            loss = loss + 10*(loss_equ_lat + loss_inv)
 
         threshold = 0
 
@@ -199,6 +203,8 @@ def evaluate(data_loader, model, device):
 
         batch_size = points.shape[0]
         metric_logger.update(loss=loss.item())
+        metric_logger.update(loss_logits_inv=loss_inv.item())
+        metric_logger.update(loss_lat_equ=loss_equ_lat.item())
         metric_logger.meters['iou'].update(iou.item(), n=batch_size)
 
     # gather the stats from all processes
