@@ -187,19 +187,8 @@ def main(args):
     # )
     optimizer = torch.optim.AdamW(model_without_ddp.parameters(), lr=args.lr)
     loss_scaler = NativeScaler()
-
-    def criterion(outputs, outputs_rot, labels):
-        loss_bce = torch.nn.functional.binary_cross_entropy_with_logits(
-            outputs,
-            labels
-        )
-
-        loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
-        return loss_bce, loss_inv
-
-    def criterion_lat(lat_feat_expected, lat_feat_rot):
-        return torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
-
+    criterion = torch.nn.BCELoss()
+    
     print("criterion = %s" % str(criterion))
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)

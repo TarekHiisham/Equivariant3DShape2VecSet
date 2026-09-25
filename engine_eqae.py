@@ -18,7 +18,7 @@ import util.lr_sched as lr_sched
 
 num_sample = 512
 
-def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
+def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     log_writer=None, args=None):
@@ -63,16 +63,16 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
             outputs = o['logits']
             outputs_rot = o_rot['logits']
 
-            lat_feat = o['latents']
-            lat_feat_rot = o_rot['latents']
 
-            lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
+            loss_vol = criterion(outputs[:, :num_sample], labels[:, :num_sample])
+            loss_near = criterion(outputs[:, num_sample:], labels[:, num_sample:])
+            loss = loss_vol + 0.1 * loss_near
 
-            loss_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
-            loss_vol, loss_vol_inv = criterion(outputs[:, :num_sample], outputs_rot[:, :num_sample], labels[:, :num_sample])
-            loss_near, loss_near_inv = criterion(outputs[:, num_sample:], outputs_rot[:, num_sample:], labels[:, num_sample:])
-          
-            loss = loss_vol + 10*(loss_vol_inv+loss_lat) + 0.1 * loss_near
+            loss_vol_rot = criterion(outputs_rot[:, :num_sample], labels[:, :num_sample])
+            loss_near_rot = criterion(outputs_rot[:, num_sample:], labels[:, num_sample:])
+            loss_rot = loss_vol_rot + 0.1 * loss_near_rot
+
+            loss = loss + loss_rot
 
         loss_value = loss.item()
 
@@ -87,6 +87,16 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
         union = (pred + labels[:, :num_sample]).gt(0).sum(dim=1) + 1e-5
         iou = intersection * 1.0 / union
         iou = iou.mean()
+
+        pred_rot = torch.zeros_like(outputs_rot[:, :num_sample])
+        pred_rot[outputs_rot[:, :num_sample]>=threshold] = 1
+
+        accuracy_rot = (pred_rot==labels[:, :num_sample]).float().sum(dim=1) / labels[:, :num_sample].shape[1]
+        accuracy_rot = accuracy_rot.mean()
+        intersection_rot = (pred_rot * labels[:, :num_sample]).sum(dim=1)
+        union_rot = (pred_rot + labels[:, :num_sample]).gt(0).sum(dim=1) + 1e-5
+        iou_rot = intersection_rot * 1.0 / union_rot
+        iou_rot = iou_rot.mean()
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
@@ -103,14 +113,14 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
 
         metric_logger.update(loss=loss_value)
 
-        # Check the property of IN/EQ
-        metric_logger.update(latent_equ_err=loss_lat.item())
-        metric_logger.update(logits_inv_err=loss_vol_inv.item())
-
         metric_logger.update(loss_vol=loss_vol.item())
         metric_logger.update(loss_near=loss_near.item())
 
+        metric_logger.update(loss_vol_rot=loss_vol_rot.item())
+        metric_logger.update(loss_near_rot=loss_near_rot.item())
+
         metric_logger.update(iou=iou.item())
+        metric_logger.update(iou_rot=iou_rot.item())
 
         min_lr = 10.
         max_lr = 0.
@@ -137,18 +147,8 @@ def train_one_epoch(model: torch.nn.Module, criterion, criterion_lat,
 
 @torch.no_grad()
 def evaluate(data_loader, model, device):
-    def criterion(outputs, outputs_rot, labels):
-        loss_bce = torch.nn.functional.binary_cross_entropy_with_logits(
-            outputs,
-            labels
-        )
-
-        loss_inv = torch.nn.functional.mse_loss(outputs, outputs_rot)
-        return loss_bce, loss_inv
+    criterion = torch.nn.BCELoss()
     
-    def criterion_lat(lat_feat_expected, lat_feat_rot):
-        return torch.nn.functional.mse_loss(lat_feat_expected, lat_feat_rot)
-
     metric_logger = misc.MetricLogger(delimiter="  ")
     header = 'Test:'
 
@@ -178,16 +178,12 @@ def evaluate(data_loader, model, device):
             o_rot = model(surface_rot, points_rot, return_latents=True)
             
             outputs = o['logits']
-            lat_feat = o['latents']
             outputs_rot = o_rot['logits']
-            lat_feat_rot = o_rot['latents']
 
-            lat_feat_expected = torch.einsum('ij, bmj -> bmi', D, lat_feat)
+            loss = criterion(outputs, labels)
+            loss_rot = criterion(outputs_rot, labels)
 
-            loss, loss_inv = criterion(outputs, outputs_rot, labels)
-            loss_equ_lat = criterion_lat(lat_feat_expected, lat_feat_rot)
-
-            loss = loss + 10*(loss_equ_lat + loss_inv)
+            loss = loss + loss_rot
 
         threshold = 0
 
@@ -201,15 +197,26 @@ def evaluate(data_loader, model, device):
         iou = intersection * 1.0 / union + 1e-5
         iou = iou.mean()
 
+        pred_rot = torch.zeros_like(outputs_rot)
+        pred_rot[outputs_rot>=threshold] = 1
+
+        accuracy_rot = (pred_rot==labels).float().sum(dim=1) / labels.shape[1]
+        accuracy_rot = accuracy_rot.mean()
+        intersection_rot = (pred_rot * labels).sum(dim=1)
+        union_rot = (pred_rot + labels).gt(0).sum(dim=1)
+        iou_rot = intersection_rot * 1.0 / union_rot + 1e-5
+        iou_rot = iou_rot.mean()
+
         batch_size = points.shape[0]
         metric_logger.update(loss=loss.item())
-        metric_logger.update(loss_logits_inv=loss_inv.item())
-        metric_logger.update(loss_lat_equ=loss_equ_lat.item())
+        metric_logger.update(loss_rot=loss_rot.item())
+
         metric_logger.meters['iou'].update(iou.item(), n=batch_size)
+        metric_logger.meters['iou_rot'].update(iou_rot.item(), n=batch_size)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print('* iou {iou.global_avg:.3f} loss {losses.global_avg:.3f}'
-          .format(iou=metric_logger.iou, losses=metric_logger.loss))
+    print('* iou {iou.global_avg:.3f} iou_rot {iou_rot.global_avg:.3f} loss {losses.global_avg:.3f}'
+          .format(iou=metric_logger.iou, iou_rot=metric_logger.iou_rot, losses=metric_logger.loss))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
